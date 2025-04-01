@@ -1,116 +1,136 @@
-// 필요한 모듈 불러오기
 require('dotenv').config();
 const express = require('express');
+const sqlite3 = require('sqlite3').verbose();
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+const bodyParser = require('body-parser');
 const axios = require('axios');
+
 const app = express();
-
-// JSON 요청 본문 파싱을 위한 미들웨어
-app.use(express.json());
-
-// 환경 변수에서 OpenAI API 키 가져오기
+const PORT = process.env.PORT || 3000;
+const SECRET_KEY = process.env.SECRET_KEY;
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
-// 플레이어 상태 초기화
-let playerData = {
-    name: '모험가',
-    health: 100,
-    level: 1,
-    experience: 0,
-    items: ['기본 검'],
-    choices: [],
-    diary: []
+app.use(cors());
+app.use(bodyParser.json());
+
+// SQLite3 데이터베이스 연결
+const db = new sqlite3.Database('./users.db', (err) => {
+    if (err) console.error('데이터베이스 연결 실패:', err.message);
+    else console.log('데이터베이스 연결 성공');
+});
+
+// 회원가입
+app.post('/register', async (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ message: '이메일과 비밀번호를 입력하세요.' });
+    }
+    
+    const hashedPassword = await bcrypt.hash(password, 10);
+    db.run('INSERT INTO users (email, password) VALUES (?, ?)', [email, hashedPassword], (err) => {
+        if (err) {
+            return res.status(400).json({ message: '이미 존재하는 이메일입니다.' });
+        }
+        res.status(201).json({ message: '회원가입 성공' });
+    });
+});
+
+// 로그인
+app.post('/login', (req, res) => {
+    const { email, password } = req.body;
+    if (!email || !password) {
+        return res.status(400).json({ message: '이메일과 비밀번호를 입력하세요.' });
+    }
+    
+    db.get('SELECT * FROM users WHERE email = ?', [email], async (err, user) => {
+        if (err || !user) {
+            return res.status(401).json({ message: '이메일 또는 비밀번호가 잘못되었습니다.' });
+        }
+        
+        const isValid = await bcrypt.compare(password, user.password);
+        if (!isValid) {
+            return res.status(401).json({ message: '이메일 또는 비밀번호가 잘못되었습니다.' });
+        }
+        
+        const token = jwt.sign({ id: user.id, email: user.email }, SECRET_KEY, { expiresIn: '1h' });
+        res.json({ message: '로그인 성공', token });
+    });
+});
+
+// 인증 미들웨어
+const authenticate = (req, res, next) => {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(403).json({ message: '토큰이 필요합니다.' });
+    
+    jwt.verify(token, SECRET_KEY, (err, decoded) => {
+        if (err) return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });
+        req.user = decoded;
+        next();
+    });
 };
 
-// GPT에게 나레이션 요청
-async function getNarration() {
-    try {
-        const response = await axios.post(
-            'https://api.openai.com/v1/chat/completions',
-            {
-                model: 'gpt-4',
-                messages: [
-                    {
-                        role: "system",
-                        content: "당신은 로그라이크 TRPG 게임의 내레이터입니다. 게임의 시작을 알리는 나레이션을 작성해주세요. 플레이어는 던전 탐험가이며, 처음 던전 입구에 도달한 상태입니다."
-                    },
-                    {
-                        role: "user",
-                        content: "게임 시작을 알리는 나레이션을 작성해주세요."
-                    }
-                ],
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${OPENAI_API_KEY}`,
-                    'Content-Type': 'application/json',
-                },
-            }
-        );
-        return response.data.choices[0].message.content;
-    } catch (error) {
-        console.error('GPT 나레이션 요청 오류:', error);
-        throw new Error('나레이션을 가져오는 중 오류가 발생했습니다.');
+// 주제 저장 (로그인된 사용자만 가능)
+app.post('/topic', authenticate, (req, res) => {
+    const { topic } = req.body;
+    if (!topic || topic.length > 200) {
+        return res.status(400).json({ message: '주제는 1~200자 이내여야 합니다.' });
     }
-}
+    
+    db.run('INSERT INTO topics (user_id, topic) VALUES (?, ?)', [req.user.id, topic], function(err) {
+        if (err) return res.status(500).json({ message: '주제 저장 실패' });
+        res.status(201).json({ message: '주제 저장 성공', topicId: this.lastID });
+    });
+});
 
-// 상태창 마크다운 생성
-function getStatusMarkdown() {
-    return `
-### 플레이어 상태
+// 주제 조회 (모든 사용자 가능)
+app.get('/topics', (req, res) => {
+    db.all('SELECT topics.id, topics.topic, users.email AS author FROM topics JOIN users ON topics.user_id = users.id', [], (err, rows) => {
+        if (err) return res.status(500).json({ message: '주제 조회 실패' });
+        res.json(rows);
+    });
+});
 
-- **이름**: ${playerData.name}
-- **체력**: ${playerData.health}/100
-- **레벨**: ${playerData.level}
-- **경험치**: ${playerData.experience}/100
-- **아이템**: ${playerData.items.join(', ')}
-
-### 일기장 
-
-${playerData.diary.length > 0 ? playerData.diary.join('\n\n') : '아직 기록된 사건이 없습니다.'}
-    `;
-}
-
-// 플레이어 선택 처리 엔드포인트
-app.post('/chat', async (req, res) => {
-    const { message } = req.body;
-
-    if (!message) {
-        return res.status(400).json({ error: '메시지 내용이 필요합니다.' });
-    }
-
-    try {
-        // GPT에게 대화 내용에 따른 스토리 진행 요청
-        const narration = await getNarration();
-
-        // 플레이어 선택 저장 및 일기장 업데이트
-        playerData.choices.push(message);
-        playerData.diary.push(`- ${message}`);
-
-        // 상태 업데이트 (예: 경험치 증가, 레벨업 처리 등)
-        playerData.experience += 10;
-        if (playerData.experience >= 100) {
-            playerData.level++;
-            playerData.experience = 0;
-        }
-
-        // 상태 마크다운 생성
-        const statusMarkdown = getStatusMarkdown();
-
-        // 클라이언트에 응답
-        res.json({
-            narration: narration,
-            status: statusMarkdown
+// 주제 수정 (작성자 본인만 가능)
+app.put('/topic/:id', authenticate, (req, res) => {
+    const { topic } = req.body;
+    const topicId = req.params.id;
+    
+    db.get('SELECT * FROM topics WHERE id = ? AND user_id = ?', [topicId, req.user.id], (err, row) => {
+        if (err || !row) return res.status(403).json({ message: '수정 권한이 없습니다.' });
+        
+        db.run('UPDATE topics SET topic = ? WHERE id = ?', [topic, topicId], (err) => {
+            if (err) return res.status(500).json({ message: '주제 수정 실패' });
+            res.json({ message: '주제 수정 성공' });
         });
-    } catch (error) {
-        console.error('플레이어 선택 처리 오류:', error);
-        res.status(500).json({ error: '서버 오류가 발생했습니다.' });
-    }
+    });
 });
 
-// 서버 실행
-const PORT = process.env.PORT || 3000;
+// GPT와 대화하는 API
+app.post('/chat', authenticate, (req, res) => {
+    db.get('SELECT topic FROM topics WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [req.user.id], (err, row) => {
+        if (err || !row) return res.status(400).json({ message: '주제를 먼저 설정하세요.' });
+        
+        const userMessage = req.body.message;
+        const topic = row.topic;
+        
+        axios.post('https://api.openai.com/v1/chat/completions', {
+            model: 'gpt-4',
+            messages: [
+                { role: 'system', content: `이제부터 너는 '${topic}'라는 주제에 맞춰 대화를 이어가야 해.` },
+                { role: 'user', content: userMessage }
+            ]
+        }, {
+            headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' }
+        }).then(response => {
+            res.json({ response: response.data.choices[0].message.content });
+        }).catch(error => {
+            res.status(500).json({ message: 'GPT 응답 실패', error: error.response.data });
+        });
+    });
+});
+
 app.listen(PORT, () => {
-    console.log(`서버가 ${PORT} 포트에서 실행 중입니다.`);
+    console.log(`Server running on port ${PORT}`);
 });
-
-
