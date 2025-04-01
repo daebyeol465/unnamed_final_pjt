@@ -64,7 +64,7 @@ function getStatusMarkdown() {
 - **경험치**: ${playerData.experience}/100
 - **아이템**: ${playerData.items.join(', ')}
 
-### 일기장
+### 일기장 
 
 ${playerData.diary.length > 0 ? playerData.diary.join('\n\n') : '아직 기록된 사건이 없습니다.'}
     `;
