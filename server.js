@@ -22,7 +22,7 @@ const db = new sqlite3.Database('./users.db', (err) => {
 });
 
 // 회원가입
-app.post('/register', async (req, res) => {
+app.post('/users', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
         return res.status(400).json({ message: '이메일과 비밀번호를 입력하세요.' });
@@ -108,6 +108,29 @@ app.put('/topic/:id', authenticate, (req, res) => {
         db.run('UPDATE topics SET topic = ? WHERE id = ?', [topic, topicId], (err) => {
             if (err) return res.status(500).json({ message: '주제 수정 실패' });
             res.json({ message: '주제 수정 성공' });
+        });
+    });
+});
+
+// 주제 삭제 (작성자 본인만 가능)
+app.delete('/topic/:id', authenticate, (req, res) => {
+    const topicId = req.params.id;
+    const userId = req.user.id; // 현재 로그인한 사용자 ID
+
+    // 주제가 현재 로그인한 사용자의 것인지 확인
+    db.get('SELECT * FROM topics WHERE id = ? AND user_id = ?', [topicId, userId], (err, row) => {
+        if (err) return res.status(500).json({ message: '주제 확인 실패' });
+        if (!row) return res.status(403).json({ message: '삭제 권한이 없습니다.' });
+
+        // 🚀 해당 주제에 연결된 메시지도 삭제
+        db.run('DELETE FROM messages WHERE topic_id = ?', [topicId], (err) => {
+            if (err) return res.status(500).json({ message: '대화 삭제 실패' });
+
+            // 🚀 주제 삭제
+            db.run('DELETE FROM topics WHERE id = ?', [topicId], (err) => {
+                if (err) return res.status(500).json({ message: '주제 삭제 실패' });
+                res.json({ message: '주제 삭제 성공' });
+            });
         });
     });
 });
