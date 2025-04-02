@@ -61,9 +61,13 @@ app.post('/login', (req, res) => {
 
 // 인증 미들웨어
 const authenticate = (req, res, next) => {
-    const token = req.headers['authorization'];
-    if (!token) return res.status(403).json({ message: '토큰이 필요합니다.' });
+    const authHeader = req.headers['authorization'];
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        return res.status(403).json({ message: '토큰이 필요합니다.' });
+    }
     
+    const token = authHeader.split(' ')[1]; // "Bearer token값"에서 "token값"만 추출
+
     jwt.verify(token, SECRET_KEY, (err, decoded) => {
         if (err) return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });
         req.user = decoded;
