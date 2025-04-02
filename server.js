@@ -62,11 +62,12 @@ app.post('/login', (req, res) => {
 // 인증 미들웨어
 const authenticate = (req, res, next) => {
     const authHeader = req.headers['authorization'];
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+
+    if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
         return res.status(403).json({ message: '토큰이 필요합니다.' });
     }
-    
-    const token = authHeader.split(' ')[1]; // "Bearer token값"에서 "token값"만 추출
+
+    const token = authHeader.split(' ')[1];
 
     jwt.verify(token, SECRET_KEY, (err, decoded) => {
         if (err) return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });
@@ -112,29 +113,52 @@ app.put('/topic/:id', authenticate, (req, res) => {
 });
 
 // GPT와 대화하는 API
-app.post('/chat', authenticate, (req, res) => {
-    db.get('SELECT topic FROM topics WHERE user_id = ? ORDER BY created_at DESC LIMIT 1', [req.user.id], (err, row) => {
-        if (err || !row) return res.status(400).json({ message: '주제를 먼저 설정하세요.' });
-        
-        const userMessage = req.body.message;
+app.post('/chat/:id', authenticate, (req, res) => {
+    const topicId = req.params.id;
+    const userId = req.user.id; // 로그인한 유저 ID
+    const userMessage = req.body.message;
+
+    db.get('SELECT topic FROM topics WHERE id = ?', [topicId], (err, row) => {
+        if (err || !row) return res.status(400).json({ message: '해당 ID의 주제를 찾을 수 없습니다.' });
+
         const topic = row.topic;
-        
-        axios.post('https://api.openai.com/v1/chat/completions', {
-            model: 'gpt-4',
-            messages: [
-                { role: 'system', content: `이제부터 너는 '${topic}'라는 주제에 맞춰 대화를 이어가야 해.` },
-                { role: 'user', content: userMessage }
-            ]
-        }, {
-            headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' }
-        }).then(response => {
-            res.json({ response: response.data.choices[0].message.content });
-        }).catch(error => {
-            res.status(500).json({ message: 'GPT 응답 실패', error: error.response.data });
+
+        // 🚀 현재 로그인한 유저의 대화만 불러오기
+        db.all('SELECT role, content FROM messages WHERE topic_id = ? AND user_id = ? ORDER BY timestamp ASC',
+            [topicId, userId], (err, messages) => {
+            
+            if (err) return res.status(500).json({ message: '이전 대화 불러오기 실패' });
+
+            const conversation = messages.map(msg => ({ role: msg.role, content: msg.content }));
+            conversation.unshift({ role: 'system', content: `이제부터 너는 '${topic}'라는 주제에 맞춰 대화를 이어가야 해.` });
+            conversation.push({ role: 'user', content: userMessage });
+
+            // OpenAI API 요청
+            axios.post('https://api.openai.com/v1/chat/completions', {
+                model: 'gpt-4',
+                messages: conversation
+            }, {
+                headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' }
+            }).then(response => {
+                const botResponse = response.data.choices[0].message.content;
+
+                // 🚀 사용자와 GPT의 대화를 저장 (유저별로 구분)
+                db.run('INSERT INTO messages (topic_id, user_id, role, content) VALUES (?, ?, ?, ?), (?, ?, ?, ?)',
+                    [topicId, userId, 'user', userMessage, topicId, userId, 'assistant', botResponse], 
+                    (err) => {
+                        if (err) return res.status(500).json({ message: '대화 저장 실패' });
+                        res.json({ response: botResponse });
+                    }
+                );
+            }).catch(error => {
+                console.error('OpenAI API Error:', error.response ? error.response.data : error.message);
+                res.status(500).json({ message: 'GPT 응답 실패', error: error.response ? error.response.data : error.message });
+            });
         });
     });
 });
 
+// 서버 실행
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`서버가 http://localhost:${PORT} 에서 실행 중입니다.`);
 });
