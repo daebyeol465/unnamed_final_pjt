@@ -6,179 +6,234 @@
     <title>세명 챗봇</title>
     <style>
         body {
-            background-color: #111;
-            color: #0f0;
             font-family: Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            text-align: center;
             margin: 0;
-            padding: 0;
         }
-        header {
+        nav {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            padding: 10px 20px;
-            background-color: #222;
+            padding: 1rem 2rem;
+            background: #1f1f1f;
         }
-        .logo {
-            font-size: 24px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-        .auth-buttons button {
-            background-color: #0f0;
+        #title { color: #76c7c0; font-size: 1.5rem; cursor: pointer; }
+        #auth-buttons button {
+            background: #76c7c0;
+            color: black;
             border: none;
-            padding: 8px 16px;
-            margin-left: 10px;
+            padding: 0.5rem 1rem;
             cursor: pointer;
+            margin: 0 5px;
         }
-        .container {
-            max-width: 800px;
-            margin: 20px auto;
-            padding: 20px;
-            background-color: #222;
-            border-radius: 10px;
-        }
-        .topic {
-            padding: 10px;
-            background-color: #333;
-            margin-bottom: 10px;
+        main { padding: 2rem; }
+        .topic-item {
+            background: #1f1f1f;
+            padding: 1rem;
+            border-radius: 8px;
             cursor: pointer;
-            border-radius: 5px;
+            transition: background 0.3s;
+            margin: 5px auto;
+            max-width: 300px;
         }
-        .topic:hover {
-            background-color: #444;
-        }
-        .hidden {
-            display: none;
-        }
-        .chat-box, .auth-box {
-            flex-direction: column;
-            margin-top: 20px;
-            padding: 20px;
-            background-color: #222;
-            border-radius: 10px;
-        }
-        .chat-messages {
-            height: 300px;
-            overflow-y: auto;
-            background-color: #333;
-            padding: 10px;
-            border-radius: 5px;
-        }
-        .input-box {
-            display: flex;
-            margin-top: 10px;
-        }
-        .input-box input {
-            flex-grow: 1;
-            padding: 8px;
-        }
-        .input-box button {
-            background-color: #0f0;
-            border: none;
-            padding: 8px 16px;
-            margin-left: 10px;
-            cursor: pointer;
-        }
+        .topic-item:hover { background: #2c2c2c; }
     </style>
 </head>
 <body>
-    <header>
-        <div class="logo" onclick="showMain()">세명 챗봇</div>
-        <div class="auth-buttons">
-            <button onclick="showAuth()">회원가입 / 로그인</button>
+
+    <nav>
+        <div id="title" onclick="goToPage('home')">세명 챗봇</div>
+        <div id="auth-buttons">
+            <button id="login-btn" onclick="goToPage('login')">로그인</button>
+            <button id="signup-btn" onclick="goToPage('signup')">회원가입</button>
+            <button id="logout-btn" onclick="logout()" style="display: none;">로그아웃</button>
         </div>
-    </header>
-    <div class="container" id="main-page">
-        <h2>주제 목록</h2>
-        <div id="topics"></div>
-    </div>
-    <div class="container hidden" id="chat-box">
-        <h2 id="chat-title"></h2>
-        <div class="chat-messages" id="chat-messages"></div>
-        <button onclick="startChat()">대화 시작하기</button>
-    </div>
-    <div class="container hidden" id="auth-box">
-        <h2>로그인 / 회원가입</h2>
-        <input type="email" id="email" placeholder="이메일">
-        <input type="password" id="password" placeholder="비밀번호">
-        <button onclick="login()">로그인</button>
-        <button onclick="register()">회원가입</button>
-    </div>
+    </nav>
+
+    <main id="content"></main>
+
     <script>
-        function showMain() {
-            document.getElementById('main-page').classList.remove('hidden');
-            document.getElementById('chat-box').classList.add('hidden');
-            document.getElementById('auth-box').classList.add('hidden');
-        }
+        let token = localStorage.getItem('token');
+        let currentUserId = localStorage.getItem('userId');
 
-        function showAuth() {
-            document.getElementById('main-page').classList.add('hidden');
-            document.getElementById('chat-box').classList.add('hidden');
-            document.getElementById('auth-box').classList.remove('hidden');
-        }
-
-        async function loadTopics() {
-            const response = await fetch('http://localhost:3000/topics');
-            const topics = await response.json();
-            const topicsContainer = document.getElementById('topics');
-            topicsContainer.innerHTML = '';
-            topics.forEach(topic => {
-                const div = document.createElement('div');
-                div.className = 'topic';
-                div.textContent = topic.topic;
-                div.onclick = () => openChat(topic.id, topic.topic);
-                topicsContainer.appendChild(div);
-            });
-        }
-
-        function openChat(id, title) {
-            selectedTopicId = id;
-            document.getElementById('chat-title').textContent = title;
-            document.getElementById('main-page').classList.add('hidden');
-            document.getElementById('chat-box').classList.remove('hidden');
-            document.getElementById('auth-box').classList.add('hidden');
-        }
-
-        function startChat() {
-            const token = localStorage.getItem('token');
-            if (!token) {
-                showAuth();
-                return;
+        function goToPage(page) {
+            if (page === 'home') {
+                loadTopics();
+            } else if (page === 'login') {
+                document.getElementById('content').innerHTML = `
+                    <h2>로그인</h2>
+                    <input id="login-email" type="email" placeholder="이메일">
+                    <input id="login-password" type="password" placeholder="비밀번호">
+                    <button onclick="login()">로그인</button>
+                    <p><a href="#" onclick="goToPage('signup')">회원가입</a></p>
+                `;
+            } else if (page === 'signup') {
+                document.getElementById('content').innerHTML = `
+                    <h2>회원가입</h2>
+                    <input id="signup-email" type="email" placeholder="이메일">
+                    <input id="signup-password" type="password" placeholder="비밀번호">
+                    <button onclick="signup()">가입하기</button>
+                    <p><a href="#" onclick="goToPage('login')">로그인</a></p>
+                `;
             }
-            alert('대화 시작! (서버 연결 필요)');
         }
 
         async function login() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
             const response = await fetch('http://localhost:3000/login', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
             const data = await response.json();
             if (data.token) {
                 localStorage.setItem('token', data.token);
-                showMain();
+                localStorage.setItem('userId', data.userId);
+                updateAuthUI(true);
+                goToPage('home');
             } else {
                 alert(data.message);
             }
         }
 
-        async function register() {
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            const response = await fetch('http://localhost:3000/users', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ email, password })
+        async function loadTopics() {
+            const response = await fetch('http://localhost:3000/topics');
+            const topics = await response.json();
+            const topicContainer = document.getElementById('content');
+
+            let topicHTML = `<h2>주제를 선택하세요</h2><div id="topics">`;
+            topics.forEach(topic => {
+                topicHTML += `<div class="topic-item" onclick="showTopicDetail(${topic.id}, '${topic.topic}', '${topic.author}', ${topic.user_id})">
+                    <strong>${topic.topic}</strong><br>by ${topic.author}
+                </div>`;
             });
+            topicHTML += `</div>`;
+
+            // 로그인 상태일 때만 "새 주제 추가" 버튼 표시
+            if (token) {
+                topicHTML += `
+                    <button onclick="showAddTopicForm()">새 주제 추가</button>
+                    <div id="add-topic-form" style="display: none; margin-top: 10px;">
+                        <input id="new-topic" type="text" placeholder="새로운 주제 입력" maxlength="200">
+                        <button onclick="addTopic()">추가</button>
+                    </div>
+                `;
+            }
+
+            topicContainer.innerHTML = topicHTML;
+        }
+
+        function showAddTopicForm() {
+            document.getElementById('add-topic-form').style.display = 'block';
+        }
+
+        async function addTopic() {
+            const topic = document.getElementById('new-topic').value.trim();
+            if (!topic) {
+                alert("주제를 입력하세요.");
+                return;
+            }
+
+            const response = await fetch('http://localhost:3000/topic', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ topic })
+            });
+
+            const data = await response.json();
+            if (data.message === '주제 저장 성공') {
+                alert("주제가 추가되었습니다.");
+                loadTopics();  // 목록 갱신
+            } else {
+                alert(data.message);
+            }
+        }
+
+        function showTopicDetail(topicId, topicName, topicAuthor, topicOwnerId) {
+            let editButtons = '';
+            if (currentUserId == topicOwnerId) {
+                editButtons = `
+                    <button onclick="editTopic(${topicId}, '${topicName}')">✏️ 수정</button>
+                    <button onclick="deleteTopic(${topicId})">🗑️ 삭제</button>
+                `;
+            }
+        
+            document.getElementById('content').innerHTML = `
+                <h2>${topicName}</h2>
+                <p>작성자: ${topicAuthor}</p>
+                ${editButtons}
+                <button onclick="startChat(${topicId}, '${topicName}')">💬 이 주제로 대화하기</button>
+                <br><br>
+                <button onclick="goToPage('home')">⬅️ 뒤로 가기</button>
+            `;
+        }
+
+        function startChat(topicId) {
+            if (!token) {
+                alert("로그인이 필요한 기능입니다!");
+                goToPage('login');
+                return;
+            }
+            window.location.href = `/chat.html?topic=${topicId}`;
+        }
+
+        async function editTopic(topicId, oldTopicName) {
+            const newTopic = prompt("새로운 주제 이름을 입력하세요:", oldTopicName);
+            if (!newTopic || newTopic.trim() === oldTopicName) return;
+
+            const response = await fetch(`http://localhost:3000/topic/${topicId}`, {
+                method: 'PUT',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ topic: newTopic.trim() })
+            });
+        
             const data = await response.json();
             alert(data.message);
+            if (data.message === '주제 수정 성공') showTopicDetail(topicId, newTopic, "내가 작성한 주제", currentUserId);
+        }
+
+
+        async function deleteTopic(topicId) {
+            if (!confirm("정말 삭제하시겠습니까? 이 주제에 연결된 모든 대화도 삭제됩니다.")) return;
+                
+            const response = await fetch(`http://localhost:3000/topic/${topicId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+        
+            const data = await response.json();
+            alert(data.message);
+            if (data.message === '주제 삭제 성공') goToPage('home');
+        }
+
+
+        function updateAuthUI(isLoggedIn) {
+            document.getElementById('login-btn').style.display = isLoggedIn ? 'none' : 'inline-block';
+            document.getElementById('signup-btn').style.display = isLoggedIn ? 'none' : 'inline-block';
+            document.getElementById('logout-btn').style.display = isLoggedIn ? 'inline-block' : 'none';
+        }
+
+        function logout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('userId');
+            updateAuthUI(false);
+            goToPage('home');
+        }
+
+        if (token) {
+            updateAuthUI(true);
         }
 
         loadTopics();
     </script>
+
 </body>
 </html>
