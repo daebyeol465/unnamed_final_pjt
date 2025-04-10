@@ -59,7 +59,7 @@
   <div class="topic-box">
     <h2 id="topic-title">로딩 중...</h2>
     <p id="author-info"></p>
-    <textarea id="edit-area" disabled style="display: none;"></textarea>
+    <textarea id="edit-area" style="display: none;" disabled></textarea>
     <div class="button-group">
       <button class="edit">수정</button>
       <button class="delete">삭제</button>
@@ -74,16 +74,21 @@
     let isOwner = false;
 
     async function loadTopic() {
+      const editArea = document.getElementById('edit-area');
+
       if (!topicId) {
         // 새 주제 작성 모드
         document.getElementById('topic-title').textContent = '새 주제를 작성하세요';
-        document.getElementById('edit-area').style.display = 'block';
+        editArea.style.display = 'block';
+        editArea.disabled = false;
+        editArea.focus();
+
         document.querySelector('.edit').textContent = '저장';
         document.querySelector('.delete').style.display = 'none';
         document.querySelector('.chat').style.display = 'none';
 
         document.querySelector('.edit').onclick = async () => {
-          const newTopic = document.getElementById('edit-area').value;
+          const newTopic = editArea.value;
           if (!newTopic.trim()) {
             alert('내용을 입력해주세요.');
             return;
@@ -128,25 +133,19 @@
 
         const topic = data.topic;
         document.getElementById('topic-title').textContent = topic.topic;
-        document.getElementById('edit-area').value = topic.topic;
+        editArea.value = topic.topic;
         document.getElementById('author-info').textContent = `작성자: ${topic.author}`;
 
-        // 토큰이 있다면 작성자인지 확인
+        // 작성자인지 확인
         if (token) {
           const payload = JSON.parse(atob(token.split('.')[1]));
           isOwner = topic.author === payload.email;
         }
 
-        // 비로그인 사용자 대응
+        // 로그인 여부에 따라 버튼 동작 정의
         if (!token) {
-          document.querySelector('.edit').onclick = () => {
-            alert('로그인이 필요합니다.');
-            location.href = 'user.html';
-          };
-          document.querySelector('.delete').onclick = () => {
-            alert('로그인이 필요합니다.');
-            location.href = 'user.html';
-          };
+          document.querySelector('.edit').onclick =
+          document.querySelector('.delete').onclick =
           document.querySelector('.chat').onclick = () => {
             alert('로그인이 필요합니다.');
             location.href = 'user.html';
@@ -157,54 +156,51 @@
             location.href = `chat.html?id=${topicId}`;
           };
 
-          // 수정 버튼 동작
           if (isOwner) {
-  let editing = false; // 현재 수정 모드인지 여부
+            // 수정 기능
+            let editing = false;
+            document.querySelector('.edit').onclick = async () => {
+              if (!editing) {
+                // 수정 모드 진입
+                editing = true;
+                editArea.style.display = 'block';
+                editArea.disabled = false;
+                editArea.focus();
+                document.querySelector('.edit').textContent = '저장';
+              } else {
+                // 저장 시도
+                const newText = editArea.value.trim();
+                if (!newText) {
+                  alert('내용을 입력해주세요.');
+                  return;
+                }
 
-  document.querySelector('.edit').onclick = () => {
-    const editArea = document.getElementById('edit-area');
+                const res = await fetch(`http://localhost:3000/topic/${topicId}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({ topic: newText })
+                });
+                const data = await res.json();
+                alert(data.message || '수정되었습니다.');
 
-    if (!editing) {
-      // ✨ 수정 모드 진입
-      editing = true;
-      editArea.style.display = 'block';  // <- ✅ 입력칸 보이게
-      editArea.disabled = false;
-      editArea.focus();
-      document.querySelector('.edit').textContent = '저장';
-    } else {
-      // ✨ 저장 시도
-      const newText = editArea.value.trim();
-      if (!newText) {
-        alert('내용을 입력해주세요.');
-        return;
-      }
+                editing = false;
+                editArea.disabled = true;
+                document.querySelector('.edit').textContent = '수정';
+                document.getElementById('topic-title').textContent = newText;
+              }
+            };
 
-      fetch(`http://localhost:3000/topic/${topicId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ topic: newText })
-      }).then(res => res.json())
-        .then(data => {
-          alert(data.message || '수정되었습니다.');
-          // ✨ 저장 완료 후, 다시 보기 모드
-          editing = false;
-          editArea.disabled = true;
-          document.querySelector('.edit').textContent = '수정';
-          document.getElementById('topic-title').textContent = newText; // 제목도 갱신
-        });
-    }
-  };
-
-
-            // 삭제 버튼
+            // 삭제 기능
             document.querySelector('.delete').onclick = () => {
               if (!confirm('정말 삭제하시겠습니까?')) return;
               fetch(`http://localhost:3000/topic/${topicId}`, {
                 method: 'DELETE',
-                headers: { 'Authorization': `Bearer ${token}` }
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
               }).then(res => res.json())
                 .then(data => {
                   alert(data.message);
@@ -212,6 +208,7 @@
                 });
             };
           } else {
+            // 작성자가 아닌 경우 수정/삭제 제한
             document.querySelector('.edit').onclick = () => alert('권한이 없습니다.');
             document.querySelector('.delete').onclick = () => alert('권한이 없습니다.');
           }
