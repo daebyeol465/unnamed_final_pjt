@@ -62,16 +62,21 @@ app.post('/login', (req, res) => {
 // 인증 미들웨어
 const authenticate = (req, res, next) => {
     const authHeader = req.headers['authorization'];
+    console.log('🔥 요청 Authorization 헤더:', authHeader);
 
     if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
+        console.log('⛔ 토큰 없음 또는 형식 오류');
         return res.status(403).json({ message: '토큰이 필요합니다.' });
     }
 
     const token = authHeader.split(' ')[1];
-
     jwt.verify(token, SECRET_KEY, (err, decoded) => {
-        if (err) return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });
+        if (err) {
+            console.log('⛔ 토큰 검증 실패:', err.message);
+            return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });
+        }
         req.user = decoded;
+        console.log('✅ 인증된 사용자:', decoded);
         next();
     });
 };
@@ -135,6 +140,17 @@ app.delete('/topic/:id', authenticate, (req, res) => {
     });
 });
 
+// 특정 주제 하나 조회
+app.get('/topic/:id', (req, res) => {
+    const topicId = req.params.id;
+    
+    db.get('SELECT topics.id, topics.topic, users.email AS author FROM topics JOIN users ON topics.user_id = users.id WHERE topics.id = ?', [topicId], (err, row) => {
+        if (err) return res.status(500).json({ message: '주제 조회 실패' });
+        if (!row) return res.status(404).json({ message: '주제를 찾을 수 없습니다.' });
+        res.json({ topic: row });
+    });
+});
+
 // GPT와 대화하는 API
 app.post('/chat/:id', authenticate, (req, res) => {
     const topicId = req.params.id;
@@ -164,6 +180,8 @@ app.post('/chat/:id', authenticate, (req, res) => {
                 headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' }
             }).then(response => {
                 const botResponse = response.data.choices[0].message.content;
+
+                console.log('🤖 GPT 응답:', botResponse);
 
                 // 🚀 사용자와 GPT의 대화를 저장 (유저별로 구분)
                 db.run('INSERT INTO messages (topic_id, user_id, role, content) VALUES (?, ?, ?, ?), (?, ?, ?, ?)',

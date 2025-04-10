@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>로그인 / 회원가입</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Helvetica Neue', sans-serif;
+      background-color: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    h1 {
+      color: #0f0;
+    }
+    .form-container {
+      background-color: #222;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(0, 255, 128, 0.1);
+      max-width: 400px;
+      width: 100%;
+    }
+    .form-container input {
+      width: 100%;
+      padding: 0.75rem;
+      margin: 0.5rem 0;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+    }
+    .form-container button {
+      width: 100%;
+      padding: 0.75rem;
+      margin-top: 1rem;
+      background-color: #0f0;
+      color: #000;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .switch {
+      margin-top: 1rem;
+      text-align: center;
+      color: #ccc;
+      cursor: pointer;
+    }
+    .switch:hover {
+      color: #0f0;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <h1>ChatGPT 챗봇</h1>
+  <div class="form-container">
+    <form id="auth-form">
+      <input type="email" id="email" placeholder="이메일" required />
+      <input type="password" id="password" placeholder="비밀번호" required />
+      <button type="submit">로그인</button>
+    </form>
+    <div class="switch" onclick="toggleMode()">계정이 없으신가요? 회원가입</div>
+  </div>
+
+  <script>
+    let isLoginMode = true;
+    const form = document.getElementById('auth-form');
+    const button = form.querySelector('button');
+    const switcher = document.querySelector('.switch');
+
+    function toggleMode() {
+      isLoginMode = !isLoginMode;
+      button.textContent = isLoginMode ? '로그인' : '회원가입';
+      switcher.textContent = isLoginMode ? '계정이 없으신가요? 회원가입' : '계정이 있으신가요? 로그인';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+
+      const endpoint = isLoginMode ? '/login' : '/users';
+      const res = await fetch(`http://localhost:3000${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        if (isLoginMode) {
+          localStorage.setItem('token', data.token);
+          alert('로그인 성공!');
+          location.href = 'main.html';
+        } else {
+          alert('회원가입 성공! 이제 로그인해 주세요.');
+          toggleMode();
+        }
+      } else {
+        alert(data.message);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>주제 상세</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    body {
+      margin: 0;
+      background-color: #111;
+      color: #eee;
+      font-family: 'Helvetica Neue', sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+    .topic-box {
+      background-color: #222;
+      border-radius: 12px;
+      padding: 2rem;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 0 15px rgba(0, 255, 128, 0.1);
+      margin-bottom: 2rem;
+    }
+    h2 {
+      color: #0f0;
+    }
+    .button-group button {
+      padding: 0.75rem 1.5rem;
+      margin: 0.5rem;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.3s;
+    }
+    .edit { background-color: #0f0; color: #000; }
+    .delete { background-color: crimson; color: #fff; }
+    .chat { background-color: #333; color: #0f0; }
+    .button-group button:hover {
+      opacity: 0.9;
+    }
+    textarea {
+      width: 100%;
+      height: 100px;
+      margin-top: 1rem;
+      border-radius: 8px;
+      padding: 1rem;
+      font-size: 1rem;
+      border: none;
+      resize: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="topic-box">
+    <h2 id="topic-title">로딩 중...</h2>
+    <p id="author-info"></p>
+    <textarea id="edit-area" disabled style="display: none;"></textarea>
+    <div class="button-group">
+      <button class="edit">수정</button>
+      <button class="delete">삭제</button>
+      <button class="chat">대화 시작</button>
+    </div>
+  </div>
+
+  <script>
+    const urlParams = new URLSearchParams(window.location.search);
+    const topicId = urlParams.get('id');
+    const token = localStorage.getItem('token');
+    let isOwner = false;
+
+    async function loadTopic() {
+      if (!topicId) {
+        // 새 주제 작성 모드
+        document.getElementById('topic-title').textContent = '새 주제를 작성하세요';
+        document.getElementById('edit-area').style.display = 'block';
+        document.querySelector('.edit').textContent = '저장';
+        document.querySelector('.delete').style.display = 'none';
+        document.querySelector('.chat').style.display = 'none';
+
+        document.querySelector('.edit').onclick = async () => {
+          const newTopic = document.getElementById('edit-area').value;
+          if (!newTopic.trim()) {
+            alert('내용을 입력해주세요.');
+            return;
+          }
+
+          try {
+            const res = await fetch('http://localhost:3000/topic', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ topic: newTopic })
+            });
+
+            const data = await res.json();
+            if (res.ok && data.topicId) {
+              alert('주제가 저장되었습니다.');
+              location.href = 'main.html';
+            } else {
+              alert(data.message || '저장에 실패했습니다.');
+            }
+          } catch (err) {
+            console.error(err);
+            alert('서버 오류가 발생했습니다.');
+          }
+        };
+
+        return;
+      }
+
+      // 기존 주제 불러오기
+      try {
+        const res = await fetch(`http://localhost:3000/topic/${topicId}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          alert(data.message || '주제를 찾을 수 없습니다.');
+          location.href = 'main.html';
+          return;
+        }
+
+        const topic = data.topic;
+        document.getElementById('topic-title').textContent = topic.topic;
+        document.getElementById('edit-area').value = topic.topic;
+        document.getElementById('author-info').textContent = `작성자: ${topic.author}`;
+
+        // 토큰이 있다면 작성자인지 확인
+        if (token) {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          isOwner = topic.author === payload.email;
+        }
+
+        // 비로그인 사용자 대응
+        if (!token) {
+          document.querySelector('.edit').onclick = () => {
+            alert('로그인이 필요합니다.');
+            location.href = 'user.html';
+          };
+          document.querySelector('.delete').onclick = () => {
+            alert('로그인이 필요합니다.');
+            location.href = 'user.html';
+          };
+          document.querySelector('.chat').onclick = () => {
+            alert('로그인이 필요합니다.');
+            location.href = 'user.html';
+          };
+        } else {
+          // 대화 시작은 누구나 가능
+          document.querySelector('.chat').onclick = () => {
+            location.href = `chat.html?id=${topicId}`;
+          };
+
+          // 수정 버튼 동작
+          if (isOwner) {
+  let editing = false; // 현재 수정 모드인지 여부
+
+  document.querySelector('.edit').onclick = () => {
+    const editArea = document.getElementById('edit-area');
+
+    if (!editing) {
+      // ✨ 수정 모드 진입
+      editing = true;
+      editArea.style.display = 'block';  // <- ✅ 입력칸 보이게
+      editArea.disabled = false;
+      editArea.focus();
+      document.querySelector('.edit').textContent = '저장';
+    } else {
+      // ✨ 저장 시도
+      const newText = editArea.value.trim();
+      if (!newText) {
+        alert('내용을 입력해주세요.');
+        return;
+      }
+
+      fetch(`http://localhost:3000/topic/${topicId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ topic: newText })
+      }).then(res => res.json())
+        .then(data => {
+          alert(data.message || '수정되었습니다.');
+          // ✨ 저장 완료 후, 다시 보기 모드
+          editing = false;
+          editArea.disabled = true;
+          document.querySelector('.edit').textContent = '수정';
+          document.getElementById('topic-title').textContent = newText; // 제목도 갱신
+        });
+    }
+  };
+
+
+            // 삭제 버튼
+            document.querySelector('.delete').onclick = () => {
+              if (!confirm('정말 삭제하시겠습니까?')) return;
+              fetch(`http://localhost:3000/topic/${topicId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+              }).then(res => res.json())
+                .then(data => {
+                  alert(data.message);
+                  location.href = 'main.html';
+                });
+            };
+          } else {
+            document.querySelector('.edit').onclick = () => alert('권한이 없습니다.');
+            document.querySelector('.delete').onclick = () => alert('권한이 없습니다.');
+          }
+        }
+      } catch (err) {
+        console.error(err);
+        alert('주제를 불러오는 중 오류가 발생했습니다.');
+        location.href = 'main.html';
+      }
+    }
+
+    loadTopic();
+  </script>
+</body>
+</html>

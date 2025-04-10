@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>주제 목록 - ChatGPT 챗봇</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Helvetica Neue', sans-serif;
+      background-color: #111;
+      color: #eee;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background-color: #000;
+      padding: 1rem 2rem;
+      box-shadow: 0 2px 10px rgba(0, 255, 128, 0.1);
+    }
+    header h1 {
+      color: #0f0;
+      margin: 0;
+    }
+    header .auth-buttons button {
+      background-color: #0f0;
+      color: #000;
+      border: none;
+      padding: 0.5rem 1rem;
+      margin-left: 0.5rem;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    main {
+      padding: 2rem;
+    }
+    .topic-list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1.5rem;
+    }
+    .topic-card {
+      background-color: #222;
+      border-radius: 12px;
+      padding: 1rem;
+      transition: transform 0.3s;
+      border: 1px solid #0f08;
+    }
+    .topic-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 0 20px rgba(0, 255, 128, 0.2);
+    }
+    .topic-card h3 {
+      color: #0f0;
+    }
+    .create-topic {
+      margin: 2rem 0;
+    }
+    .create-topic button {
+      background-color: #0f0;
+      color: #000;
+      padding: 1rem 2rem;
+      font-size: 1rem;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ChatGPT 챗봇</h1>
+    <div class="auth-buttons" id="auth-buttons">
+      <!-- 로그인/회원가입 또는 로그아웃 버튼 -->
+    </div>
+  </header>
+
+  <main>
+    <div class="create-topic">
+      <button onclick="handleCreateTopic()">주제 저장하기</button>
+    </div>
+
+    <section class="topic-list" id="topic-list">
+      <!-- 주제 목록 동적 렌더링 -->
+    </section>
+  </main>
+
+  <script>
+    const token = localStorage.getItem('token');
+    const authButtons = document.getElementById('auth-buttons');
+
+    if (token) {
+      authButtons.innerHTML = '<button onclick="logout()">로그아웃</button>';
+    } else {
+      authButtons.innerHTML = `
+        <button onclick="location.href='user.html'">로그인</button>
+        <button onclick="location.href='user.html'">회원가입</button>
+      `;
+    }
+
+    function logout() {
+      localStorage.removeItem('token');
+      location.reload();
+    }
+
+    function handleCreateTopic() {
+      if (!token) {
+        alert('로그인이 필요합니다.');
+        location.href = 'user.html';
+        return;
+      }
+      location.href = 'topic.html';
+    }
+
+    // 주제 목록 불러오기
+    fetch('http://localhost:3000/topics')
+        .then(res => res.json())
+        .then(data => {
+          const container = document.getElementById('topic-list');
+          container.innerHTML = '';
+          data.forEach(topic => {
+            const card = document.createElement('div');
+            card.className = 'topic-card';
+            card.innerHTML = `
+              <h3>${topic.topic}</h3>
+              <p>작성자: ${topic.author}</p>
+            `;
+            card.style.cursor = 'pointer'; // 커서 변경 (UX 개선)
+            card.onclick = () => {
+              location.href = `topic.html?id=${topic.id}`;
+            };
+            container.appendChild(card);
+          });
+        });
+  </script>
+</body>
+</html>
