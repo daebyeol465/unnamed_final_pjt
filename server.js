@@ -65,18 +65,18 @@ const authenticate = (req, res, next) => {
     console.log('🔥 요청 Authorization 헤더:', authHeader);
 
     if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
-        console.log('⛔ 토큰 없음 또는 형식 오류');
+        console.log(' 없음 또는 형식 오류');
         return res.status(403).json({ message: '토큰이 필요합니다.' });
     }
 
     const token = authHeader.split(' ')[1];
     jwt.verify(token, SECRET_KEY, (err, decoded) => {
         if (err) {
-            console.log('⛔ 토큰 검증 실패:', err.message);
+            console.log('토큰 검증 실패:', err.message);
             return res.status(401).json({ message: '유효하지 않은 토큰입니다.' });
         }
         req.user = decoded;
-        console.log('✅ 인증된 사용자:', decoded);
+        console.log('인증된 사용자:', decoded);
         next();
     });
 };
@@ -162,7 +162,7 @@ app.post('/chat/:id', authenticate, (req, res) => {
 
         const topic = row.topic;
 
-        // 🚀 현재 로그인한 유저의 대화만 불러오기
+        //현재 로그인한 유저의 대화만 불러오기
         db.all('SELECT role, content FROM messages WHERE topic_id = ? AND user_id = ? ORDER BY timestamp ASC',
             [topicId, userId], (err, messages) => {
             
@@ -181,9 +181,9 @@ app.post('/chat/:id', authenticate, (req, res) => {
             }).then(response => {
                 const botResponse = response.data.choices[0].message.content;
 
-                console.log('🤖 GPT 응답:', botResponse);
+                console.log('GPT 응답:', botResponse);
 
-                // 🚀 사용자와 GPT의 대화를 저장 (유저별로 구분)
+                //사용자와 GPT의 대화를 저장 (유저별로 구분)
                 db.run('INSERT INTO messages (topic_id, user_id, role, content) VALUES (?, ?, ?, ?), (?, ?, ?, ?)',
                     [topicId, userId, 'user', userMessage, topicId, userId, 'assistant', botResponse], 
                     (err) => {

@@ -99,7 +99,7 @@
         div.textContent = content || '[내용 없음]';
         chatBox.appendChild(div);
         chatBox.scrollTop = chatBox.scrollHeight;
-        console.log(`🟢 ${role} 메시지 추가됨:`, content);
+        console.log(`${role} 메시지 추가됨:`, content);
       }
 
       async function sendMessage() {
@@ -120,7 +120,7 @@
           });
 
           const data = await res.json();
-          console.log('📦 서버 응답:', data);
+          console.log('서버 응답:', data);
 
           if (res.ok && data.response) {
             appendMessage('assistant', data.response);
@@ -128,7 +128,7 @@
             appendMessage('assistant', '[응답 없음]');
           }
         } catch (err) {
-          console.error('❌ 에러:', err);
+          console.error('에러:', err);
           alert('서버에 연결할 수 없습니다.');
         }
       }
